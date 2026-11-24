@@ -1,0 +1,7 @@
+__pycache__/
+*.egg-info/
+work/
+results/
+.nextflow*
+trace*.txt
+test/
