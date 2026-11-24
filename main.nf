@@ -6,6 +6,7 @@ params.outdir      = 'results'
 params.limit       = -1
 params.reference   = "${projectDir}/assets/tcga_reference.json"
 params.tiles       = 30
+params.show        = 4
 
 process STAIN_NORM {
     tag "$name"
@@ -19,11 +20,11 @@ process STAIN_NORM {
     output:
     path "${name}.tsv", emit: tsv
     path "${name}_fit.json", optional: true
-    path "${name}.png", optional: true
+    path "${name}_*.png", optional: true
 
     script:
     """
-    stain_norm.py --slide "${slide}" --name "${name}" --reference ${reference} --tiles ${params.tiles}
+    stain_norm.py --slide ${slide} --name "${name}" --reference ${reference} --tiles ${params.tiles} --show ${params.show}
     """
 }
 

@@ -98,8 +98,11 @@ def main():
             f"<pre>{text}</pre>"]
     if both:
         html.append("<img src='stain_norm_summary.png' style='max-width:100%'>")
-    html.append("<p>columns: stored, stored normalised, icc, icc normalised</p>")
-    html += [f"<p>{r['name']}</p><img src='previews/{r['name']}.png' style='max-width:100%'>" for r in ok]
+    html.append("<p>per slide: whole slide as stored and with icc, before and after normalising, then random tissue tiles "
+                "(columns: stored, stored normalised, icc, icc normalised)</p>")
+    for r in ok:
+        html += [f"<h3>{r['name']}</h3>", f"<img src='previews/{r['name']}_slide.png' style='max-width:100%'>",
+                 f"<img src='previews/{r['name']}_tiles.png' style='max-width:100%'>"]
     open("index.html", "w").write("\n".join(html) + "</body></html>\n")
 
 
