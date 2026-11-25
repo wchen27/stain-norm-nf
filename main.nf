@@ -8,6 +8,7 @@ params.reference   = "${projectDir}/assets/tcga_reference.json"
 params.quantiles   = "${projectDir}/assets/tcga_quantiles.json"
 params.baseline    = "${projectDir}/assets/tcga_baseline.json"
 params.tiles       = 30
+params.scaling     = 'p10-p90'
 params.show        = 4
 
 process STAIN_NORM {
@@ -27,7 +28,7 @@ process STAIN_NORM {
 
     script:
     """
-    stain_norm.py --slide ${slide} --name "${name}" --reference ${reference} --quantiles ${quantiles} --tiles ${params.tiles} --show ${params.show}
+    stain_norm.py --slide ${slide} --name "${name}" --reference ${reference} --quantiles ${quantiles} --scaling ${params.scaling} --tiles ${params.tiles} --show ${params.show}
     """
 }
 

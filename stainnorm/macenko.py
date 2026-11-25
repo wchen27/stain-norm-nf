@@ -4,7 +4,9 @@ import random
 import numpy as np
 from PIL import Image, ImageCms
 
-IO, ALPHA, BETA, PCT = 240, 1.0, 0.15, 99.0
+IO, ALPHA, BETA = 240, 1.0, 0.15
+PCTS = (10, 90, 99)
+SCALINGS = ("p10-p90", "p99")
 SRGB = ImageCms.createProfile("sRGB")
 
 
@@ -32,20 +34,28 @@ def amounts(od, he):
     return np.linalg.lstsq(he, od.T, rcond=None)[0]
 
 
-def fit_od(od, alpha=ALPHA, beta=BETA, pct=PCT):
+def fit_od(od, alpha=ALPHA, beta=BETA):
     t = tissue(od, beta)
     he = stain_vectors(t, alpha)
-    return he, np.percentile(amounts(t, he), pct, axis=1)
+    return he, np.percentile(amounts(t, he), PCTS, axis=1).T
 
 
 def fit_tiles(tiles):
     return fit_od(rgb_to_od(np.vstack([t.reshape(-1, 3) for t in tiles])))
 
 
-def apply(rgb, src_he, src_max, ref_he, ref_max, io=IO, beta=BETA):
+def match_amounts(c, src_pcts, ref_pcts, scaling="p10-p90"):
+    src, ref = np.asarray(src_pcts), np.asarray(ref_pcts)
+    if scaling == "p99":
+        return c * (ref[:, 2] / src[:, 2])[:, None]
+    slope = (ref[:, 1] - ref[:, 0]) / (src[:, 1] - src[:, 0])
+    return np.clip(ref[:, :1] + (c - src[:, :1]) * slope[:, None], 0, None)
+
+
+def apply(rgb, src_he, src_pcts, ref_he, ref_pcts, scaling="p10-p90", io=IO, beta=BETA):
     rgb = np.asarray(rgb)
     od = rgb_to_od(rgb, io)
-    c = amounts(od, src_he) * (np.asarray(ref_max) / np.asarray(src_max))[:, None]
+    c = match_amounts(amounts(od, src_he), src_pcts, ref_pcts, scaling)
     w = np.clip(od.max(1) / beta, 0, 1)
     out = w * io * np.exp(-np.asarray(ref_he) @ c) + (1 - w) * rgb.reshape(-1, 3).T
     return np.clip(out, 0, 255).T.reshape(rgb.shape).astype(np.uint8)
@@ -54,7 +64,7 @@ def apply(rgb, src_he, src_max, ref_he, ref_max, io=IO, beta=BETA):
 def load_reference(path, setting):
     full = json.load(open(path))
     ref = {**full[{"stored": "before", "icc": "after"}[setting]], "amount_pcts": full["amount_pcts"], "rgb_pcts": full["rgb_pcts"]}
-    return np.array(ref["median"]["he"]), np.array(ref["median"]["max"]), ref
+    return np.array(ref["median"]["he"]), np.array(ref["median"]["pcts"]), ref
 
 
 def icc_transform(slide):

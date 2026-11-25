@@ -80,7 +80,7 @@ def table(data):
 
 
 def main():
-    baseline = json.load(open(sys.argv[1]))
+    baselines = json.load(open(sys.argv[1]))
     rows = []
     for p in sorted(glob.glob("tsv/*.tsv")):
         rows += list(csv.DictReader(open(p), delimiter="\t"))
@@ -91,6 +91,8 @@ def main():
         w.writerows(rows)
 
     ok = [r for r in rows if not r["error"]]
+    scaling = ok[0]["scaling"] if ok else "p10-p90"
+    baseline = baselines[scaling]
     data = {"ge": ok, "tcga": baseline}
     counts = (f"GE slides: {len(rows)}, fitted {len(ok)}, with an ICC profile {sum(1 for r in ok if r.get('h_r_icc'))}. "
               f"TCGA reference slides: {len(baseline['stored']['w1_orig'])} as stored, {len(baseline['icc']['w1_orig'])} with ICC")
@@ -102,7 +104,7 @@ def main():
     if ok:
         plot(data, "stain_norm_summary.png")
 
-    html = [f"<html><head>{CSS}</head><body><h2>Macenko normalisation to the TCGA median reference</h2>", f"<p>{counts}</p>"]
+    html = [f"<html><head>{CSS}</head><body><h2>Macenko normalisation to the TCGA median reference, {scaling} scaling</h2>", f"<p>{counts}</p>"]
     html += [f"<p>{e}</p>" for e in errors]
     html += [table(data),
              "<ul><li>each number: median over slides. GE: tissue pixels of 10 tiles per slide. TCGA: 50,000 of the tissue pixels kept "
