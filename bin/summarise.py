@@ -22,6 +22,7 @@ SINGLE = [
     ("de_norm_stored_vs_icc", "ΔE stored vs icc, both normalised"),
 ]
 COLOURS = {"stored": "#2a78d6", "icc": "#eb6834"}
+JITTER = np.random.default_rng(0).uniform(-0.12, 0.12, 100000)
 
 
 def values(rows, key):
@@ -43,16 +44,15 @@ def plot(both, path):
     axes[-1].axis("off")
     for ax, (k, title) in zip(axes, PAIRED):
         a, b = values(both, f"{k}_stored"), values(both, f"{k}_icc")
-        ax.plot([0, 1], [a, b], color="#c8c7c0", lw=0.8, zorder=1)
         for x, v, s in ((0, a, "stored"), (1, b, "icc")):
-            ax.scatter(np.full(len(v), x), v, s=24, color=COLOURS[s], edgecolor="white", lw=0.8, zorder=3)
+            ax.scatter(x + JITTER[:len(v)], v, s=24, color=COLOURS[s], edgecolor="white", lw=0.8, zorder=3)
             ax.plot([x - 0.25, x + 0.25], [np.median(v)] * 2, color="#222", lw=2, zorder=4)
         ax.set_xticks([0, 1], ["stored", "icc"])
         ax.set_xlim(-0.5, 1.5)
         style(ax, title.replace(", ", ",\n"))
     for ax, (k, title) in zip(axes[len(PAIRED):], SINGLE):
         v = values(both, k)
-        ax.scatter(np.random.default_rng(0).uniform(-0.1, 0.1, len(v)), v, s=24, color="#888780", edgecolor="white", lw=0.8, zorder=3)
+        ax.scatter(JITTER[:len(v)], v, s=24, color="#888780", edgecolor="white", lw=0.8, zorder=3)
         ax.plot([-0.25, 0.25], [np.median(v)] * 2, color="#222", lw=2, zorder=4)
         ax.set_xticks([])
         ax.set_xlim(-0.5, 0.5)

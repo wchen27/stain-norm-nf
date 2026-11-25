@@ -42,11 +42,13 @@ def fit_tiles(tiles):
     return fit_od(rgb_to_od(np.vstack([t.reshape(-1, 3) for t in tiles])))
 
 
-def apply(rgb, src_he, src_max, ref_he, ref_max, io=IO):
+def apply(rgb, src_he, src_max, ref_he, ref_max, io=IO, beta=BETA):
     rgb = np.asarray(rgb)
-    c = amounts(rgb_to_od(rgb, io), src_he) * (np.asarray(ref_max) / np.asarray(src_max))[:, None]
-    out = np.clip(io * np.exp(-np.asarray(ref_he) @ c), 0, 255)
-    return out.T.reshape(rgb.shape).astype(np.uint8)
+    od = rgb_to_od(rgb, io)
+    c = amounts(od, src_he) * (np.asarray(ref_max) / np.asarray(src_max))[:, None]
+    w = np.clip(od.max(1) / beta, 0, 1)
+    out = w * io * np.exp(-np.asarray(ref_he) @ c) + (1 - w) * rgb.reshape(-1, 3).T
+    return np.clip(out, 0, 255).T.reshape(rgb.shape).astype(np.uint8)
 
 
 def load_reference(path, setting):

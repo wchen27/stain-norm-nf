@@ -1,5 +1,5 @@
 IMAGE ?= wchen27/stain-norm
-TAG ?= 0.1.0
+TAG ?= 0.1.1
 PLATFORM ?= linux/amd64
 
 .PHONY: build push
