@@ -5,6 +5,8 @@ params.samplesheet = null
 params.outdir      = 'results'
 params.limit       = -1
 params.reference   = "${projectDir}/assets/tcga_reference.json"
+params.quantiles   = "${projectDir}/assets/tcga_quantiles.json"
+params.baseline    = "${projectDir}/assets/tcga_baseline.json"
 params.tiles       = 30
 params.show        = 4
 
@@ -16,6 +18,7 @@ process STAIN_NORM {
     input:
     tuple val(name), path(slide)
     path reference
+    path quantiles
 
     output:
     path "${name}.tsv", emit: tsv
@@ -24,7 +27,7 @@ process STAIN_NORM {
 
     script:
     """
-    stain_norm.py --slide ${slide} --name "${name}" --reference ${reference} --tiles ${params.tiles} --show ${params.show}
+    stain_norm.py --slide ${slide} --name "${name}" --reference ${reference} --quantiles ${quantiles} --tiles ${params.tiles} --show ${params.show}
     """
 }
 
@@ -33,16 +36,17 @@ process SUMMARY {
 
     input:
     path tsvs, stageAs: 'tsv/*'
+    path baseline
 
     output:
     path 'stain_norm_results.tsv'
     path 'stain_norm_summary.txt'
-    path 'stain_norm_summary.png', optional: true
+    path '*.png', optional: true
     path 'index.html'
 
     script:
     """
-    summarise.py
+    summarise.py ${baseline}
     """
 }
 
@@ -58,6 +62,6 @@ workflow {
         slides = slides.take(limit)
     }
 
-    STAIN_NORM(slides, file(params.reference, checkIfExists: true))
-    SUMMARY(STAIN_NORM.out.tsv.collect())
+    STAIN_NORM(slides, file(params.reference, checkIfExists: true), file(params.quantiles, checkIfExists: true))
+    SUMMARY(STAIN_NORM.out.tsv.collect(), file(params.baseline, checkIfExists: true))
 }

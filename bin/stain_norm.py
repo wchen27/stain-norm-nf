@@ -11,9 +11,8 @@ from stainnorm import macenko as m
 from stainnorm import metrics as mt
 
 
-def colour_dist(px, ref):
-    return float(np.mean([np.abs(np.percentile(px[:, j], ref["rgb_pcts"]) - ref["rgb_pcts_median"][c]).mean()
-                          for j, c in enumerate("rgb")]))
+def w1(px, tq, setting):
+    return float(np.mean([np.abs(np.percentile(px[:, j], tq["q"]) - tq[setting]["quantiles"][c]).mean() for j, c in enumerate("rgb")]))
 
 
 def measure(tiles, setting, opts):
@@ -32,8 +31,9 @@ def measure(tiles, setting, opts):
     sub = tiles[:opts.metric_tiles]
     norm = [m.apply(t, he, mx, rhe, rmx) for t in sub]
     masks = [mt.tissue_mask(t) for t in sub]
-    row["rgb_dist_orig"] = colour_dist(np.vstack([t[k] for t, k in zip(sub, masks)]), ref)
-    row["rgb_dist_norm"] = colour_dist(np.vstack([t[k] for t, k in zip(norm, masks)]), ref)
+    tq = json.load(open(opts.quantiles))
+    row["w1_orig"] = w1(np.vstack([t[k] for t, k in zip(sub, masks)]), tq, setting)
+    row["w1_norm"] = w1(np.vstack([t[k] for t, k in zip(norm, masks)]), tq, setting)
     row["de_norm_vs_orig"] = float(np.median([mt.delta_e2000(t, n, k) for t, n, k in zip(sub, norm, masks)]))
     row["ssim_norm_vs_orig"] = float(np.median([mt.ssim(t, n) for t, n in zip(sub, norm)]))
     return {f"{k}_{setting}": v for k, v in row.items()}, (he, mx, rhe, rmx), norm
@@ -98,6 +98,7 @@ def main():
     ap.add_argument("--slide", required=True)
     ap.add_argument("--name", required=True)
     ap.add_argument("--reference", required=True)
+    ap.add_argument("--quantiles", required=True)
     ap.add_argument("--tiles", type=int, default=30)
     ap.add_argument("--metric_tiles", type=int, default=10)
     ap.add_argument("--show", type=int, default=4)

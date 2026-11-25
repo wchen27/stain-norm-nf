@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 import csv
 import glob
+import json
+import sys
 from collections import Counter
 
 import numpy as np
@@ -8,62 +10,77 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-PAIRED = [
-    ("clipped_pct", "% tissue px with a channel <= 2"),
-    ("h_p99", "H 99th percentile"),
-    ("e_p99", "E 99th percentile"),
-    ("rgb_dist_orig", "distance to TCGA colour, original"),
-    ("rgb_dist_norm", "distance to TCGA colour, normalised"),
-    ("de_norm_vs_orig", "ΔE normalised vs original"),
-    ("ssim_norm_vs_orig", "SSIM normalised vs original"),
+MEASURES = [
+    ("w1_orig", "distance to TCGA colour, original", "{:.1f}"),
+    ("w1_norm", "distance to TCGA colour, normalised", "{:.1f}"),
+    ("de_norm_vs_orig", "ΔE normalised vs original", "{:.2f}"),
+    ("ssim_norm_vs_orig", "SSIM normalised vs original", "{:.3f}"),
+    ("h_p99", "H 99th percentile", "{:.2f}"),
+    ("e_p99", "E 99th percentile", "{:.2f}"),
+    ("clipped_pct", "% tissue px with a channel <= 2", "{:.2f}"),
 ]
-SINGLE = [
-    ("de_stored_vs_icc", "ΔE stored vs icc, original"),
-    ("de_norm_stored_vs_icc", "ΔE stored vs icc, both normalised"),
-]
-COLOURS = {"stored": "#2a78d6", "icc": "#eb6834"}
-JITTER = np.random.default_rng(0).uniform(-0.12, 0.12, 100000)
+GROUPS = [("tcga", "stored", "TCGA as stored", "#888780"), ("ge", "stored", "GE as stored", "#2a78d6"),
+          ("tcga", "icc", "TCGA ICC", "#888780"), ("ge", "icc", "GE ICC", "#2a78d6")]
+CSS = ("<style>body{font-family:sans-serif;margin:24px}table{border-collapse:collapse;font-size:14px;margin:8px 0}"
+       "td,th{padding:4px 12px;border-bottom:1px solid #ddd;text-align:right}td:first-child,th:first-child{text-align:left}"
+       "th{border-bottom:2px solid #999}ul{max-width:900px;font-size:14px;color:#333}</style>")
 
 
-def values(rows, key):
-    return np.array([float(r[key]) for r in rows])
+def ge_values(rows, key, setting):
+    return [float(r[f"{key}_{setting}"]) for r in rows if r.get(f"{key}_{setting}") not in (None, "")]
 
 
-def style(ax, title):
-    ax.set_title(title, fontsize=9, loc="left")
-    ax.grid(axis="y", color="#e5e5e5", lw=0.8)
-    ax.set_axisbelow(True)
-    for s in ("top", "right"):
-        ax.spines[s].set_visible(False)
-    ax.tick_params(labelsize=8)
+def values(data, src, key, setting):
+    return data[src][setting].get(key, []) if src == "tcga" else ge_values(data["ge"], key, setting)
 
 
-def plot(both, path):
-    fig, axes = plt.subplots(2, 5, figsize=(13, 6.8))
+def median(v, fmt):
+    return fmt.format(np.median(v)) if len(v) else "–"
+
+
+def plot(data, path):
+    fig, axes = plt.subplots(2, 4, figsize=(15, 7.5))
     axes = axes.ravel()
     axes[-1].axis("off")
-    for ax, (k, title) in zip(axes, PAIRED):
-        a, b = values(both, f"{k}_stored"), values(both, f"{k}_icc")
-        for x, v, s in ((0, a, "stored"), (1, b, "icc")):
-            ax.scatter(x + JITTER[:len(v)], v, s=24, color=COLOURS[s], edgecolor="white", lw=0.8, zorder=3)
-            ax.plot([x - 0.25, x + 0.25], [np.median(v)] * 2, color="#222", lw=2, zorder=4)
-        ax.set_xticks([0, 1], ["stored", "icc"])
-        ax.set_xlim(-0.5, 1.5)
-        style(ax, title.replace(", ", ",\n"))
-    for ax, (k, title) in zip(axes[len(PAIRED):], SINGLE):
-        v = values(both, k)
-        ax.scatter(JITTER[:len(v)], v, s=24, color="#888780", edgecolor="white", lw=0.8, zorder=3)
-        ax.plot([-0.25, 0.25], [np.median(v)] * 2, color="#222", lw=2, zorder=4)
-        ax.set_xticks([])
-        ax.set_xlim(-0.5, 0.5)
-        ax.set_ylim(bottom=0)
-        style(ax, title.replace(", ", ",\n"))
+    rng = np.random.default_rng(0)
+    for ax, (key, title, fmt) in zip(axes, MEASURES):
+        for i, (src, s, _, col) in enumerate(GROUPS):
+            v = values(data, src, key, s)
+            if not v:
+                continue
+            ax.scatter(i + rng.uniform(-0.15, 0.15, len(v)), v, s=14 if src == "tcga" else 28, color=col,
+                       alpha=0.6 if src == "tcga" else 0.9, edgecolor="white", linewidth=0.5, zorder=3)
+            ax.plot([i - 0.3, i + 0.3], [np.median(v)] * 2, color="#222", lw=2, zorder=4)
+            ax.annotate(median(v, fmt), (i + 0.32, np.median(v)), va="center", fontsize=8, color="#222")
+        ax.axvline(1.5, color="#ddd", lw=1)
+        ax.set_xticks(range(len(GROUPS)), [g[2].replace(" ", "\n", 1) for g in GROUPS], fontsize=8)
+        ax.set_xlim(-0.5, len(GROUPS) - 0.1)
+        ax.set_title(title, fontsize=9, loc="left")
+        ax.grid(axis="y", color="#eee", lw=0.8)
+        ax.set_axisbelow(True)
+        for sp in ("top", "right"):
+            ax.spines[sp].set_visible(False)
+        ax.tick_params(labelsize=8, colors="#444")
+    lo, hi = zip(*(ax.get_ylim() for ax in axes[:2]))
+    for ax in axes[:2]:
+        ax.set_ylim(0, max(hi))
     fig.tight_layout()
     fig.savefig(path, dpi=130)
     plt.close(fig)
 
 
+def table(data):
+    h = ["<table><tr><th></th>" + "".join(f"<th>{g[2]}</th>" for g in GROUPS) + "</tr>"]
+    for key, title, fmt in MEASURES:
+        h.append(f"<tr><td>{title}</td>" + "".join(f"<td>{median(values(data, src, key, s), fmt)}</td>" for src, s, _, _ in GROUPS) + "</tr>")
+    for key, title in (("de_stored_vs_icc", "ΔE as stored vs ICC, original"), ("de_norm_stored_vs_icc", "ΔE as stored vs ICC, both normalised")):
+        v = [float(r[key]) for r in data["ge"] if r.get(key)]
+        h.append(f"<tr><td>{title}</td><td colspan=4 style='text-align:center'>GE {median(v, '{:.2f}')}</td></tr>")
+    return "\n".join(h) + "</table>"
+
+
 def main():
+    baseline = json.load(open(sys.argv[1]))
     rows = []
     for p in sorted(glob.glob("tsv/*.tsv")):
         rows += list(csv.DictReader(open(p), delimiter="\t"))
@@ -74,34 +91,31 @@ def main():
         w.writerows(rows)
 
     ok = [r for r in rows if not r["error"]]
-    both = [r for r in ok if r.get("h_r_icc")]
-    out = [f"slides: {len(rows)}, fitted: {len(ok)}, with an icc profile: {len(both)}"]
-    out += [f"  {e}: {n}" for e, n in Counter(r["error"] for r in rows if r["error"]).most_common()]
-    out += [f"icc profiles: {dict(Counter(r['icc_profile'] or 'none' for r in ok))}", ""]
-    if both:
-        out.append(f"medians over the {len(both)} slides with an icc profile, stored / icc (slides where icc is lower)")
-        for k, title in PAIRED:
-            a, b = values(both, f"{k}_stored"), values(both, f"{k}_icc")
-            out.append(f"  {title}: {np.median(a):.3f} / {np.median(b):.3f} ({int((b < a).sum())} of {len(both)})")
-        for k, title in SINGLE:
-            out.append(f"  {title}: {np.median(values(both, k)):.3f}")
-        pcts = [int(k[9:-7]) for k in both[0] if k.startswith("h_ratio_p") and k.endswith("_stored")]
-        for s in ("stored", "icc"):
-            out.append(f"  reference / slide amount at p{pcts}, {s}: " + ", ".join(
-                f"{c} {[round(float(np.median(values(both, f'{c}_ratio_p{p}_{s}'))), 2) for p in pcts]}" for c in "he"))
-        plot(both, "stain_norm_summary.png")
-    text = "\n".join(out)
-    print(text)
-    open("stain_norm_summary.txt", "w").write(text + "\n")
+    data = {"ge": ok, "tcga": baseline}
+    counts = (f"GE slides: {len(rows)}, fitted {len(ok)}, with an ICC profile {sum(1 for r in ok if r.get('h_r_icc'))}. "
+              f"TCGA reference slides: {len(baseline['stored']['w1_orig'])} as stored, {len(baseline['icc']['w1_orig'])} with ICC")
+    errors = [f"{e}: {n}" for e, n in Counter(r["error"] for r in rows if r["error"]).most_common()]
+    lines = [counts] + errors + [""] + [f"{title}: " + ", ".join(f"{lab} {median(values(data, src, key, s), fmt)}" for src, s, lab, _ in GROUPS)
+                                        for key, title, fmt in MEASURES]
+    open("stain_norm_summary.txt", "w").write("\n".join(lines) + "\n")
+    print("\n".join(lines))
+    if ok:
+        plot(data, "stain_norm_summary.png")
 
-    html = ["<html><body style='font-family:sans-serif'><h2>Macenko normalisation to the TCGA median reference</h2>",
-            f"<pre>{text}</pre>"]
-    if both:
+    html = [f"<html><head>{CSS}</head><body><h2>Macenko normalisation to the TCGA median reference</h2>", f"<p>{counts}</p>"]
+    html += [f"<p>{e}</p>" for e in errors]
+    html += [table(data),
+             "<ul><li>each number: median over slides. GE: tissue pixels of 10 tiles per slide. TCGA: 50,000 of the tissue pixels kept "
+             "from 30 tiles per reference slide, each normalised with its own fit</li>"
+             "<li>distance to TCGA colour: Wasserstein distance per r g b channel to the pooled TCGA tissue pixels, mean over channels (0-255)</li>"
+             "<li>ΔE: CIEDE2000, mean over tissue pixels. SSIM: grey image, 7 x 7 window, whole tile (needs whole tiles, not in the TCGA pixel cache)</li>"
+             "<li>tissue pixels: od >= 0.15 in all channels</li></ul>"]
+    if ok:
         html.append("<img src='stain_norm_summary.png' style='max-width:100%'>")
-    html.append("<p>per slide: whole slide as stored and with icc, before and after normalising, then random tissue tiles "
-                "(columns: stored, stored normalised, icc, icc normalised)</p>")
+    html.append("<h3>slides</h3><p>whole slide as stored and with ICC, before and after normalising, then random tissue tiles "
+                "(columns: stored, stored normalised, ICC, ICC normalised)</p>")
     for r in ok:
-        html += [f"<h3>{r['name']}</h3>", f"<img src='previews/{r['name']}_slide.png' style='max-width:100%'>",
+        html += [f"<h4>{r['name']}</h4>", f"<img src='previews/{r['name']}_slide.png' style='max-width:100%'>",
                  f"<img src='previews/{r['name']}_tiles.png' style='max-width:100%'>"]
     open("index.html", "w").write("\n".join(html) + "</body></html>\n")
 
